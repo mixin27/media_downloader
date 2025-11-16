@@ -1,0 +1,20 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  plugins:
+    - custom_lint
+
+linter:
+  rules:
+    - prefer_const_constructors
+    - prefer_const_literals_to_create_immutables
+    - prefer_const_declarations
+    - avoid_print
+    - avoid_unnecessary_containers
+    - prefer_single_quotes
+    - sort_child_properties_last
+
+custom_lint:
+  rules:
+    - prefer_const_constructors
+    - prefer_const_literals_to_create_immutables

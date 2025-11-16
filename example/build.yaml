@@ -1,0 +1,9 @@
+targets:
+  $default:
+    builders:
+      riverpod_generator:
+        options:
+          # Generate freezed classes
+          freezed: false
+          # Generate json serializable
+          json_serializable: false
