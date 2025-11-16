@@ -26,7 +26,7 @@ Add to your `pubspec.yaml`:
 dependencies:
   media_downloader:
     git:
-      url: https://github.com/yourusername/media_downloader.git
+      url: https://github.com/mixin27/media_downloader.git
 ```
 
 ## Platform Setup
