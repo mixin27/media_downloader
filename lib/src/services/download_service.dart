@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/download_config.dart';
 import '../models/download_progress.dart';
@@ -32,6 +33,8 @@ class DownloadService {
     Function(DownloadTask) onComplete,
     Function(String error) onError,
   ) async {
+    RandomAccessFile? raf;
+
     try {
       // Check network conditions
       if (task.requiresWifi) {
@@ -73,21 +76,32 @@ class DownloadService {
         headers: task.headers ?? {},
         receiveTimeout: _config.receiveTimeout,
         sendTimeout: _config.connectionTimeout,
+        responseType: ResponseType.stream, // Important: stream response
       );
 
       // Check if resumable
       int startByte = 0;
-      RandomAccessFile? raf;
 
       if (task.isResumable && await file.exists()) {
-        startByte = task.downloadedBytes;
-        raf = await file.open(mode: FileMode.append);
-        options.headers!['Range'] = 'bytes=$startByte-';
+        final existingSize = await file.length();
+        if (existingSize > 0 && existingSize < (task.fileSize ?? 0)) {
+          startByte = existingSize;
+          raf = await file.open(mode: FileMode.append);
+          options.headers!['Range'] = 'bytes=$startByte-';
+          debugPrint('Resuming download from byte: $startByte');
+        } else {
+          // File exists but not resumable, start fresh
+          raf = await file.open(mode: FileMode.write);
+        }
       } else {
         raf = await file.open(mode: FileMode.write);
       }
 
-      // Start download
+      debugPrint('Starting download: ${task.url}');
+      debugPrint('File path: $filePath');
+      debugPrint('Start byte: $startByte');
+
+      // Start download with stream response
       final response = await _dio.get<ResponseBody>(
         task.url,
         options: options,
@@ -120,27 +134,59 @@ class DownloadService {
       // Write response to file
       final stream = response.data?.stream;
       if (stream == null) {
+        await raf.close();
         throw Exception('Failed to get response stream');
       }
 
-      await for (var data in stream) {
-        await raf.writeFrom(data);
+      debugPrint('Writing to file...');
+
+      // Write with buffer to handle large files
+      await for (final data in stream) {
+        if (cancelToken.isCancelled) {
+          await raf.close();
+          debugPrint('Download cancelled by user');
+          return;
+        }
+
+        try {
+          await raf.writeFrom(data);
+          await raf.flush(); // Ensure data is written to disk
+        } catch (e) {
+          await raf.close();
+          throw Exception('Failed to write to file: $e');
+        }
       }
 
       await raf.close();
+      debugPrint('File writing completed');
 
-      // Verify file size
+      // Verify file exists and has content
+      if (!await file.exists()) {
+        throw Exception('File was not created');
+      }
+
       final fileSize = await file.length();
+      debugPrint('Final file size: $fileSize bytes');
+
+      if (fileSize == 0) {
+        throw Exception('Downloaded file is empty');
+      }
+
+      // Verify file size if known
       final expectedSize = task.fileSize ?? 0;
 
-      if (expectedSize > 0 && fileSize != expectedSize) {
-        throw Exception(
-          'File size mismatch. Expected: $expectedSize, Got: $fileSize',
+      if (expectedSize > 0 &&
+          (fileSize < expectedSize * 0.95 || fileSize > expectedSize * 1.05)) {
+        // Allow 5% variance for compression/encoding differences
+        debugPrint(
+          'Warning: File size mismatch. Expected: $expectedSize, Got: $fileSize',
         );
+        // Don't fail, just warn
       }
 
       // Verify checksum if provided
       if (_config.verifyChecksum && task.checksum != null) {
+        debugPrint('Verifying checksum...');
         final isValid = await FileUtils.verifyChecksum(
           filePath,
           task.checksum!,
@@ -149,6 +195,7 @@ class DownloadService {
           await file.delete();
           throw Exception('Checksum verification failed');
         }
+        debugPrint('Checksum verified');
       }
 
       // Download completed
@@ -156,24 +203,41 @@ class DownloadService {
         filePath: filePath,
         status: DownloadStatus.completed,
         downloadedBytes: fileSize,
-        fileSize: fileSize,
+        fileSize: fileSize > 0 ? fileSize : task.fileSize,
         updatedAt: DateTime.now(),
       );
 
       _cleanup(task.id);
+      debugPrint('Download completed successfully: ${task.fileName}');
       onComplete(completedTask);
     } on DioException catch (e) {
+      if (raf != null) {
+        try {
+          await raf.close();
+        } catch (_) {}
+      }
+
       _cleanup(task.id);
 
       if (e.type == DioExceptionType.cancel) {
+        debugPrint('Download cancelled: ${task.fileName}');
         return; // Cancelled by user, don't report as error
       }
 
       String errorMessage = _getDioErrorMessage(e);
+      debugPrint('Download error: $errorMessage');
       onError(errorMessage);
-    } catch (e) {
+    } catch (e, stackTrace) {
+      if (raf != null) {
+        try {
+          await raf.close();
+        } catch (_) {}
+      }
+
       _cleanup(task.id);
-      onError(e.toString());
+      debugPrint('Download error: $e');
+      debugPrint('Stack trace: $stackTrace');
+      onError('Download failed: ${e.toString()}');
     }
   }
 

@@ -31,6 +31,7 @@ class FileUtils {
             final downloadPath = path.join(
               dir.path.split('/Android')[0],
               'Download',
+              'MediaDownloader',
             );
             return downloadPath;
           }

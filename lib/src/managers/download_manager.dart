@@ -38,8 +38,12 @@ class DownloadManager with WidgetsBindingObserver {
   final Map<String, DownloadTask> _activeDownloads = {};
   final Map<String, StreamController<DownloadProgress>> _progressControllers =
       {};
+  final Map<String, Timer?> _dbUpdateTimers = {};
+  final Map<String, int> _pendingProgressUpdates = {};
+  final Map<String, DateTime> _lastNotificationUpdate = {};
 
   StreamSubscription<ConnectivityResult>? _connectivitySubscription;
+  Timer? _batchUpdateTimer;
   bool _initialized = false;
   bool _isPaused = false;
 
@@ -66,6 +70,12 @@ class DownloadManager with WidgetsBindingObserver {
     // Listen to network changes
     _connectivitySubscription = _networkUtils.connectivityStream.listen(
       _handleConnectivityChange,
+    );
+
+    // Start batch update timer (updates database every 2 seconds)
+    _batchUpdateTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => _performBatchDatabaseUpdate(),
     );
 
     // Resume incomplete downloads
@@ -240,40 +250,73 @@ class DownloadManager with WidgetsBindingObserver {
     _downloadService.startDownload(
       task,
       (progress) async {
-        // Update database
-        await _database.updateProgress(task.id, progress.downloadedBytes);
+        // Store progress for batch update instead of immediate database write
+        _pendingProgressUpdates[task.id] = progress.downloadedBytes;
 
-        // Update notification
+        // Update notification (throttled to once per second)
         if (_config.showNotifications) {
-          await _notificationService.showDownloadProgress(
-            progress,
-            task.fileName,
-          );
+          final now = DateTime.now();
+          final lastUpdate = _lastNotificationUpdate[task.id];
+
+          if (lastUpdate == null ||
+              now.difference(lastUpdate).inMilliseconds >= 1000) {
+            _lastNotificationUpdate[task.id] = now;
+
+            try {
+              await _notificationService.showDownloadProgress(
+                progress,
+                task.fileName,
+              );
+            } catch (e) {
+              debugPrint('Notification error: $e');
+            }
+          }
         }
 
-        // Emit progress
-        progressController.add(progress);
+        // Emit progress - check if controller is still open
+        if (!progressController.isClosed) {
+          progressController.add(progress);
+        }
       },
       (completedTask) async {
+        // Cleanup notification tracking
+        _lastNotificationUpdate.remove(task.id);
+
+        // Cleanup progress controller first
+        if (_progressControllers.containsKey(task.id)) {
+          await _progressControllers[task.id]?.close();
+          _progressControllers.remove(task.id);
+        }
+
         // Update database
-        await _database.update(completedTask);
+        try {
+          await _database.update(completedTask);
+        } catch (e) {
+          debugPrint('Error updating database: $e');
+        }
 
         // Show completion notification
         if (_config.showNotifications) {
-          await _notificationService.showCompletionNotification(
-            completedTask.id,
-            completedTask.fileName,
-            completedTask.filePath,
-          );
+          try {
+            await _notificationService.showCompletionNotification(
+              completedTask.id,
+              completedTask.fileName,
+              completedTask.filePath,
+            );
+          } catch (e) {
+            debugPrint('Error showing notification: $e');
+          }
         }
 
-        // Cleanup
+        // Remove from active downloads
         _activeDownloads.remove(task.id);
-        _progressControllers[task.id]?.close();
-        _progressControllers.remove(task.id);
 
         // Cancel background task
-        await _backgroundService.cancelDownloadTask(task.id);
+        try {
+          await _backgroundService.cancelDownloadTask(task.id);
+        } catch (e) {
+          debugPrint('Error canceling background task: $e');
+        }
 
         // Process next in queue
         if (_config.autoStartNextDownload) {
@@ -281,38 +324,12 @@ class DownloadManager with WidgetsBindingObserver {
         }
       },
       (error) async {
-        // Check if should retry
-        final currentTask = await _database.getById(task.id);
-        if (currentTask != null &&
-            currentTask.retryCount < _config.maxRetries) {
-          // Increment retry count
-          await _database.incrementRetryCount(task.id);
+        // Cleanup notification tracking
+        _lastNotificationUpdate.remove(task.id);
 
-          // Re-add to queue
-          final updatedTask = currentTask.copyWith(
-            status: DownloadStatus.queued,
-            error: error,
-          );
-          await _database.update(updatedTask);
-          _addToQueue(updatedTask);
-        } else {
-          // Mark as failed
-          await _database.updateStatus(
-            task.id,
-            DownloadStatus.failed,
-            error: error,
-          );
-
-          // Show error notification
-          if (_config.showNotifications) {
-            await _notificationService.showErrorNotification(
-              task.id,
-              task.fileName,
-              error,
-            );
-          }
-
-          // Emit error progress
+        // Cleanup progress controller first
+        if (_progressControllers.containsKey(task.id)) {
+          // Emit error progress before closing
           final errorProgress = DownloadProgress(
             downloadId: task.id,
             downloadedBytes: task.downloadedBytes,
@@ -322,13 +339,65 @@ class DownloadManager with WidgetsBindingObserver {
             status: DownloadStatus.failed,
             error: error,
           );
-          _progressControllers[task.id]?.add(errorProgress);
+
+          if (!_progressControllers[task.id]!.isClosed) {
+            _progressControllers[task.id]!.add(errorProgress);
+          }
+
+          await _progressControllers[task.id]?.close();
+          _progressControllers.remove(task.id);
         }
 
-        // Cleanup
+        // Check if should retry
+        final currentTask = await _database.getById(task.id);
+        if (currentTask != null &&
+            currentTask.retryCount < _config.maxRetries) {
+          // Increment retry count
+          try {
+            await _database.incrementRetryCount(task.id);
+
+            debugPrint(
+              'Retrying download (attempt ${currentTask.retryCount + 1}/${_config.maxRetries}): ${task.fileName}',
+            );
+
+            // Re-add to queue
+            final updatedTask = currentTask.copyWith(
+              status: DownloadStatus.queued,
+              error: error,
+            );
+            await _database.update(updatedTask);
+            _addToQueue(updatedTask);
+          } catch (e) {
+            debugPrint('Error during retry: $e');
+          }
+        } else {
+          // Mark as failed
+          try {
+            await _database.updateStatus(
+              task.id,
+              DownloadStatus.failed,
+              error: error,
+            );
+          } catch (e) {
+            debugPrint('Error updating status: $e');
+          }
+
+          // Show error notification
+          if (_config.showNotifications) {
+            try {
+              await _notificationService.showErrorNotification(
+                task.id,
+                task.fileName,
+                error,
+              );
+            } catch (e) {
+              debugPrint('Error showing notification: $e');
+            }
+          }
+        }
+
+        // Remove from active downloads
         _activeDownloads.remove(task.id);
-        _progressControllers[task.id]?.close();
-        _progressControllers.remove(task.id);
 
         // Process next in queue
         _processQueue();
@@ -497,6 +566,22 @@ class DownloadManager with WidgetsBindingObserver {
     _processQueue();
   }
 
+  Future<void> _performBatchDatabaseUpdate() async {
+    if (_pendingProgressUpdates.isEmpty) return;
+
+    // Copy and clear pending updates
+    final updates = Map<String, int>.from(_pendingProgressUpdates);
+    _pendingProgressUpdates.clear();
+
+    // Perform batch update
+    try {
+      await _database.batchUpdateProgress(updates);
+    } catch (e) {
+      // Ignore database errors
+      debugPrint('Batch update error: $e');
+    }
+  }
+
   Future<DownloadTask?> getDownload(String downloadId) async {
     _ensureInitialized();
     return await _database.getById(downloadId);
@@ -550,12 +635,24 @@ class DownloadManager with WidgetsBindingObserver {
 
   void dispose() {
     _connectivitySubscription?.cancel();
+    _batchUpdateTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _downloadService.dispose();
 
+    // Cancel all timers
+    for (final timer in _dbUpdateTimers.values) {
+      timer?.cancel();
+    }
+    _dbUpdateTimers.clear();
+
+    // Close all controllers
     for (final controller in _progressControllers.values) {
-      controller.close();
+      if (!controller.isClosed) {
+        controller.close();
+      }
     }
     _progressControllers.clear();
+    _pendingProgressUpdates.clear();
+    _lastNotificationUpdate.clear();
   }
 }

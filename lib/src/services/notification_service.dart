@@ -59,15 +59,27 @@ class NotificationService {
         final downloadId = parts[1];
         debugPrint('[meder:NotificationService]: action($action)');
         debugPrint('[meder:NotificationService]: downloadId($downloadId)');
-        debugPrint(
-          '[meder:NotificationService]: This will be handled by the download manager through WorkManager',
-        );
         // This will be handled by the download manager through WorkManager
       }
     }
   }
 
   void _handleNotificationResponse(NotificationResponse response) {
+    debugPrint(
+      'Notification response: ${response.id}, ${response.actionId}, ${response.payload}',
+    );
+
+    // Handle action button clicks
+    if (response.actionId != null) {
+      final parts = response.payload?.split('|');
+      if (parts != null && parts.length >= 2) {
+        final downloadId = parts[1];
+        _onNotificationAction?.call(response.actionId!, downloadId);
+      }
+      return;
+    }
+
+    // Handle notification tap
     if (response.payload != null) {
       final parts = response.payload!.split('|');
       if (parts.length >= 2) {
@@ -102,6 +114,8 @@ class NotificationService {
     DownloadProgress progress,
     String fileName,
   ) async {
+    final notificationId = progress.downloadId.hashCode.abs();
+
     final androidDetails = AndroidNotificationDetails(
       'download_channel',
       'Downloads',
@@ -110,12 +124,14 @@ class NotificationService {
       priority: Priority.low,
       showProgress: true,
       maxProgress: 100,
-      progress: (progress.progress * 100).toInt(),
+      progress: (progress.progress * 100).round().clamp(0, 100),
       ongoing: progress.status.isActive,
       autoCancel: false,
       playSound: false,
       enableVibration: false,
       actions: _getNotificationActions(progress.status),
+      styleInformation: const DefaultStyleInformation(true, true),
+      icon: '@mipmap/ic_launcher',
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -132,13 +148,17 @@ class NotificationService {
     final title = _getNotificationTitle(progress.status, fileName);
     final body = _getNotificationBody(progress);
 
-    await _notifications.show(
-      progress.downloadId.hashCode,
-      title,
-      body,
-      details,
-      payload: 'open|${progress.downloadId}',
-    );
+    try {
+      await _notifications.show(
+        notificationId,
+        title,
+        body,
+        details,
+        payload: 'open|${progress.downloadId}',
+      );
+    } catch (e) {
+      debugPrint('Error showing notification: $e');
+    }
   }
 
   List<AndroidNotificationAction> _getNotificationActions(
@@ -146,32 +166,36 @@ class NotificationService {
   ) {
     if (status == DownloadStatus.downloading) {
       return [
-        const AndroidNotificationAction(
+        AndroidNotificationAction(
           'pause',
           'Pause',
           showsUserInterface: false,
           cancelNotification: false,
+          icon: DrawableResourceAndroidBitmap('ic_pause'),
         ),
-        const AndroidNotificationAction(
+        AndroidNotificationAction(
           'cancel',
           'Cancel',
           showsUserInterface: false,
           cancelNotification: false,
+          icon: DrawableResourceAndroidBitmap('ic_cancel'),
         ),
       ];
     } else if (status == DownloadStatus.paused) {
       return [
-        const AndroidNotificationAction(
+        AndroidNotificationAction(
           'resume',
           'Resume',
           showsUserInterface: false,
           cancelNotification: false,
+          icon: DrawableResourceAndroidBitmap('ic_play'),
         ),
-        const AndroidNotificationAction(
+        AndroidNotificationAction(
           'cancel',
           'Cancel',
           showsUserInterface: false,
           cancelNotification: false,
+          icon: DrawableResourceAndroidBitmap('ic_cancel'),
         ),
       ];
     }

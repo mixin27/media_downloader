@@ -27,8 +27,8 @@ class DownloadConfig {
     this.showNotifications = true,
     this.enableBackgroundDownloads = true,
     this.maxRetries = 3,
-    this.connectionTimeout = const Duration(seconds: 30),
-    this.receiveTimeout = const Duration(seconds: 30),
+    this.connectionTimeout = const Duration(minutes: 2),
+    this.receiveTimeout = const Duration(minutes: 5),
     this.requiresWifiByDefault = false,
     this.chunkSize = 1024 * 1024, // 1MB chunks
     this.verifyChecksum = false,

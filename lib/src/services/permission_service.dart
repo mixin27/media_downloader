@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class PermissionService {
@@ -106,14 +107,21 @@ class PermissionService {
 
   Future<int> _getAndroidVersion() async {
     if (Platform.isAndroid) {
-      // This is a simplified version. In production, you might want to use
-      // platform channels or a plugin to get the exact Android version
       try {
-        // Assume modern Android by default
-        return 33;
+        DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+        AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+        return androidInfo.version.sdkInt;
       } catch (e) {
         return 33;
       }
+      // This is a simplified version. In production, you might want to use
+      // platform channels or a plugin to get the exact Android version
+      // try {
+      //   // Assume modern Android by default
+      //   return 33;
+      // } catch (e) {
+      //   return 33;
+      // }
     }
     return 0;
   }

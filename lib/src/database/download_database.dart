@@ -135,12 +135,16 @@ class DownloadDatabase {
 
   Future<int> update(DownloadTask task) async {
     final db = await database;
-    return await db.update(
-      'downloads',
-      task.toMap(),
-      where: 'id = ?',
-      whereArgs: [task.id],
-    );
+
+    // Use transaction for atomic update
+    return await db.transaction((txn) async {
+      return await txn.update(
+        'downloads',
+        task.toMap(),
+        where: 'id = ?',
+        whereArgs: [task.id],
+      );
+    });
   }
 
   Future<int> updateStatus(
@@ -157,19 +161,53 @@ class DownloadDatabase {
       data['error'] = error;
     }
 
-    return await db.update('downloads', data, where: 'id = ?', whereArgs: [id]);
+    // Use transaction for atomic update
+    return await db.transaction((txn) async {
+      return await txn.update(
+        'downloads',
+        data,
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    });
   }
 
   Future<int> updateProgress(String id, int downloadedBytes) async {
     final db = await database;
     final now = DateTime.now().millisecondsSinceEpoch;
 
-    return await db.update(
-      'downloads',
-      {'downloadedBytes': downloadedBytes, 'updatedAt': now},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    // Use transaction for atomic update
+    return await db.transaction((txn) async {
+      return await txn.update(
+        'downloads',
+        {'downloadedBytes': downloadedBytes, 'updatedAt': now},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    });
+  }
+
+  // Batch update for better performance during active downloads
+  Future<void> batchUpdateProgress(Map<String, int> progressMap) async {
+    if (progressMap.isEmpty) return;
+
+    final db = await database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    await db.transaction((txn) async {
+      final batch = txn.batch();
+
+      for (final entry in progressMap.entries) {
+        batch.update(
+          'downloads',
+          {'downloadedBytes': entry.value, 'updatedAt': now},
+          where: 'id = ?',
+          whereArgs: [entry.key],
+        );
+      }
+
+      await batch.commit(noResult: true);
+    });
   }
 
   Future<int> updateFilePath(String id, String filePath) async {
