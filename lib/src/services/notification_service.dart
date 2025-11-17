@@ -165,47 +165,43 @@ class NotificationService {
     DownloadStatus status,
     String downloadId,
   ) {
-    // For now, disable actions to avoid icon errors
-    // You can enable after adding icon resources
+    // Create actions with proper IDs
+    if (status == DownloadStatus.downloading) {
+      return [
+        AndroidNotificationAction(
+          'pause_$downloadId',
+          'Pause',
+          showsUserInterface: false,
+          cancelNotification: false,
+          icon: DrawableResourceAndroidBitmap('ic_pause'),
+        ),
+        AndroidNotificationAction(
+          'cancel_$downloadId',
+          'Cancel',
+          showsUserInterface: false,
+          cancelNotification: false,
+          icon: DrawableResourceAndroidBitmap('ic_cancel'),
+        ),
+      ];
+    } else if (status == DownloadStatus.paused) {
+      return [
+        AndroidNotificationAction(
+          'resume_$downloadId',
+          'Resume',
+          showsUserInterface: false,
+          cancelNotification: false,
+          icon: DrawableResourceAndroidBitmap('ic_play'),
+        ),
+        AndroidNotificationAction(
+          'cancel_$downloadId',
+          'Cancel',
+          showsUserInterface: false,
+          cancelNotification: false,
+          icon: DrawableResourceAndroidBitmap('ic_cancel'),
+        ),
+      ];
+    }
     return [];
-
-    // Uncomment after adding icon resources:
-    // if (status == DownloadStatus.downloading) {
-    //   return [
-    //     AndroidNotificationAction(
-    //       'pause',
-    //       'Pause',
-    //       showsUserInterface: false,
-    //       cancelNotification: false,
-    //       icon: DrawableResourceAndroidBitmap('ic_pause'),
-    //     ),
-    //     AndroidNotificationAction(
-    //       'cancel',
-    //       'Cancel',
-    //       showsUserInterface: false,
-    //       cancelNotification: false,
-    //       icon: DrawableResourceAndroidBitmap('ic_cancel'),
-    //     ),
-    //   ];
-    // } else if (status == DownloadStatus.paused) {
-    //   return [
-    //     AndroidNotificationAction(
-    //       'resume',
-    //       'Resume',
-    //       showsUserInterface: false,
-    //       cancelNotification: false,
-    //       icon: DrawableResourceAndroidBitmap('ic_play'),
-    //     ),
-    //     AndroidNotificationAction(
-    //       'cancel',
-    //       'Cancel',
-    //       showsUserInterface: false,
-    //       cancelNotification: false,
-    //       icon: DrawableResourceAndroidBitmap('ic_cancel'),
-    //     ),
-    //   ];
-    // }
-    // return [];
   }
 
   String _getNotificationTitle(DownloadStatus status, String fileName) {
