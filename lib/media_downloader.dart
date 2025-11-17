@@ -18,6 +18,10 @@ export 'src/managers/download_manager.dart';
 // UI
 export 'src/ui/app_lifecycle_observer.dart';
 
+// Utils
+export 'src/utils/file_utils.dart';
+export 'src/utils/network_utils.dart';
+
 import 'media_downloader.dart';
 
 class MediaDownloader {
@@ -39,6 +43,7 @@ class MediaDownloader {
     DownloadPriority priority = DownloadPriority.medium,
     bool requiresWifi = false,
     String? checksum,
+    bool useUniqueFileName = true,
   }) async {
     return await _manager.enqueue(
       url: url,
@@ -49,6 +54,7 @@ class MediaDownloader {
       priority: priority,
       requiresWifi: requiresWifi,
       checksum: checksum,
+      useUniqueFileName: useUniqueFileName,
     );
   }
 

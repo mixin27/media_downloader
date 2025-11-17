@@ -129,7 +129,7 @@ class NotificationService {
       autoCancel: false,
       playSound: false,
       enableVibration: false,
-      actions: _getNotificationActions(progress.status),
+      actions: _getNotificationActions(progress.status, progress.downloadId),
       styleInformation: const DefaultStyleInformation(true, true),
       icon: '@mipmap/ic_launcher',
     );
@@ -163,43 +163,49 @@ class NotificationService {
 
   List<AndroidNotificationAction> _getNotificationActions(
     DownloadStatus status,
+    String downloadId,
   ) {
-    if (status == DownloadStatus.downloading) {
-      return [
-        AndroidNotificationAction(
-          'pause',
-          'Pause',
-          showsUserInterface: false,
-          cancelNotification: false,
-          icon: DrawableResourceAndroidBitmap('ic_pause'),
-        ),
-        AndroidNotificationAction(
-          'cancel',
-          'Cancel',
-          showsUserInterface: false,
-          cancelNotification: false,
-          icon: DrawableResourceAndroidBitmap('ic_cancel'),
-        ),
-      ];
-    } else if (status == DownloadStatus.paused) {
-      return [
-        AndroidNotificationAction(
-          'resume',
-          'Resume',
-          showsUserInterface: false,
-          cancelNotification: false,
-          icon: DrawableResourceAndroidBitmap('ic_play'),
-        ),
-        AndroidNotificationAction(
-          'cancel',
-          'Cancel',
-          showsUserInterface: false,
-          cancelNotification: false,
-          icon: DrawableResourceAndroidBitmap('ic_cancel'),
-        ),
-      ];
-    }
+    // For now, disable actions to avoid icon errors
+    // You can enable after adding icon resources
     return [];
+
+    // Uncomment after adding icon resources:
+    // if (status == DownloadStatus.downloading) {
+    //   return [
+    //     AndroidNotificationAction(
+    //       'pause',
+    //       'Pause',
+    //       showsUserInterface: false,
+    //       cancelNotification: false,
+    //       icon: DrawableResourceAndroidBitmap('ic_pause'),
+    //     ),
+    //     AndroidNotificationAction(
+    //       'cancel',
+    //       'Cancel',
+    //       showsUserInterface: false,
+    //       cancelNotification: false,
+    //       icon: DrawableResourceAndroidBitmap('ic_cancel'),
+    //     ),
+    //   ];
+    // } else if (status == DownloadStatus.paused) {
+    //   return [
+    //     AndroidNotificationAction(
+    //       'resume',
+    //       'Resume',
+    //       showsUserInterface: false,
+    //       cancelNotification: false,
+    //       icon: DrawableResourceAndroidBitmap('ic_play'),
+    //     ),
+    //     AndroidNotificationAction(
+    //       'cancel',
+    //       'Cancel',
+    //       showsUserInterface: false,
+    //       cancelNotification: false,
+    //       icon: DrawableResourceAndroidBitmap('ic_cancel'),
+    //     ),
+    //   ];
+    // }
+    // return [];
   }
 
   String _getNotificationTitle(DownloadStatus status, String fileName) {

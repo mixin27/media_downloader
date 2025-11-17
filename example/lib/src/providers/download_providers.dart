@@ -51,12 +51,19 @@ class DownloadList extends _$DownloadList {
     String? fileName,
     DownloadPriority priority = DownloadPriority.medium,
     bool requiresWifi = false,
+    bool useUniqueFileName = true,
   }) async {
     await MediaDownloader.download(
       url: url,
       fileName: fileName,
       priority: priority,
       requiresWifi: requiresWifi,
+      useUniqueFileName: useUniqueFileName,
+      metadata: {
+        'originalFileName':
+            fileName ??
+            FileUtils.sanitizeFileName(url.split('/').last.split('?').first),
+      },
     );
     await refresh();
   }

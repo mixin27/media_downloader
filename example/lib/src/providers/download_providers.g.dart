@@ -33,7 +33,7 @@ final class DownloadListProvider
   DownloadList create() => DownloadList();
 }
 
-String _$downloadListHash() => r'8e68ab7d747a71338977324ccbfd66adcff0c92e';
+String _$downloadListHash() => r'633fe085caca166f3806dfbe8afe791b692bb5f2';
 
 abstract class _$DownloadList extends $AsyncNotifier<List<DownloadTask>> {
   FutureOr<List<DownloadTask>> build();

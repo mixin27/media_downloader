@@ -33,6 +33,11 @@ class FileUtils {
               'Download',
               'MediaDownloader',
             );
+            // Ensure the directory exists
+            // final downloadDir = Directory(downloadPath);
+            // if (!await downloadDir.exists()) {
+            //   await downloadDir.create(recursive: true);
+            // }
             return downloadPath;
           }
         }

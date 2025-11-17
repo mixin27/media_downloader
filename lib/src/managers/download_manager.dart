@@ -125,6 +125,10 @@ class DownloadManager with WidgetsBindingObserver {
   }
 
   void _handleNotificationAction(String action, String downloadId) {
+    debugPrint(
+      'Handling notification action: $action for download: $downloadId',
+    );
+
     switch (action) {
       case 'pause':
         pause(downloadId);
@@ -134,6 +138,10 @@ class DownloadManager with WidgetsBindingObserver {
         break;
       case 'cancel':
         cancel(downloadId);
+        break;
+      case 'open':
+        // User tapped notification, could open app or show download
+        debugPrint('Open notification tapped for: $downloadId');
         break;
     }
   }
@@ -147,6 +155,7 @@ class DownloadManager with WidgetsBindingObserver {
     DownloadPriority priority = DownloadPriority.medium,
     bool requiresWifi = false,
     String? checksum,
+    bool useUniqueFileName = true,
   }) async {
     _ensureInitialized();
 
@@ -154,9 +163,21 @@ class DownloadManager with WidgetsBindingObserver {
     final id = const Uuid().v4();
 
     // Determine file name
-    final finalFileName =
-        fileName ??
-        FileUtils.sanitizeFileName(url.split('/').last.split('?').first);
+    String finalFileName;
+    if (fileName != null) {
+      finalFileName = FileUtils.sanitizeFileName(fileName);
+      // Generate unique filename to avoid conflicts
+      if (useUniqueFileName) {
+        finalFileName = FileUtils.generateUniqueFileName(finalFileName);
+      }
+    } else {
+      finalFileName = FileUtils.sanitizeFileName(
+        url.split('/').last.split('?').first,
+      );
+      if (useUniqueFileName) {
+        finalFileName = FileUtils.generateUniqueFileName(finalFileName);
+      }
+    }
 
     // Get file size and check resumability
     int? fileSize;
@@ -289,34 +310,22 @@ class DownloadManager with WidgetsBindingObserver {
         }
 
         // Update database
-        try {
-          await _database.update(completedTask);
-        } catch (e) {
-          debugPrint('Error updating database: $e');
-        }
+        await _database.update(completedTask);
 
         // Show completion notification
         if (_config.showNotifications) {
-          try {
-            await _notificationService.showCompletionNotification(
-              completedTask.id,
-              completedTask.fileName,
-              completedTask.filePath,
-            );
-          } catch (e) {
-            debugPrint('Error showing notification: $e');
-          }
+          await _notificationService.showCompletionNotification(
+            completedTask.id,
+            completedTask.fileName,
+            completedTask.filePath,
+          );
         }
 
         // Remove from active downloads
         _activeDownloads.remove(task.id);
 
         // Cancel background task
-        try {
-          await _backgroundService.cancelDownloadTask(task.id);
-        } catch (e) {
-          debugPrint('Error canceling background task: $e');
-        }
+        await _backgroundService.cancelDownloadTask(task.id);
 
         // Process next in queue
         if (_config.autoStartNextDownload) {
@@ -353,46 +362,30 @@ class DownloadManager with WidgetsBindingObserver {
         if (currentTask != null &&
             currentTask.retryCount < _config.maxRetries) {
           // Increment retry count
-          try {
-            await _database.incrementRetryCount(task.id);
+          await _database.incrementRetryCount(task.id);
 
-            debugPrint(
-              'Retrying download (attempt ${currentTask.retryCount + 1}/${_config.maxRetries}): ${task.fileName}',
-            );
-
-            // Re-add to queue
-            final updatedTask = currentTask.copyWith(
-              status: DownloadStatus.queued,
-              error: error,
-            );
-            await _database.update(updatedTask);
-            _addToQueue(updatedTask);
-          } catch (e) {
-            debugPrint('Error during retry: $e');
-          }
+          // Re-add to queue
+          final updatedTask = currentTask.copyWith(
+            status: DownloadStatus.queued,
+            error: error,
+          );
+          await _database.update(updatedTask);
+          _addToQueue(updatedTask);
         } else {
           // Mark as failed
-          try {
-            await _database.updateStatus(
-              task.id,
-              DownloadStatus.failed,
-              error: error,
-            );
-          } catch (e) {
-            debugPrint('Error updating status: $e');
-          }
+          await _database.updateStatus(
+            task.id,
+            DownloadStatus.failed,
+            error: error,
+          );
 
           // Show error notification
           if (_config.showNotifications) {
-            try {
-              await _notificationService.showErrorNotification(
-                task.id,
-                task.fileName,
-                error,
-              );
-            } catch (e) {
-              debugPrint('Error showing notification: $e');
-            }
+            await _notificationService.showErrorNotification(
+              task.id,
+              task.fileName,
+              error,
+            );
           }
         }
 

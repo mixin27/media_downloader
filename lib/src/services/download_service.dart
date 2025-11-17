@@ -76,10 +76,10 @@ class DownloadService {
         headers: task.headers ?? {},
         receiveTimeout: _config.receiveTimeout,
         sendTimeout: _config.connectionTimeout,
-        responseType: ResponseType.stream, // Important: stream response
+        responseType: ResponseType.stream,
       );
 
-      // Check if resumable
+      // Check if resumable - FIXED VERSION
       int startByte = 0;
 
       if (task.isResumable && await file.exists()) {
@@ -166,7 +166,6 @@ class DownloadService {
       }
 
       final fileSize = await file.length();
-      debugPrint('Final file size: $fileSize bytes');
 
       if (fileSize == 0) {
         throw Exception('Downloaded file is empty');
@@ -178,15 +177,11 @@ class DownloadService {
       if (expectedSize > 0 &&
           (fileSize < expectedSize * 0.95 || fileSize > expectedSize * 1.05)) {
         // Allow 5% variance for compression/encoding differences
-        debugPrint(
-          'Warning: File size mismatch. Expected: $expectedSize, Got: $fileSize',
-        );
         // Don't fail, just warn
       }
 
       // Verify checksum if provided
       if (_config.verifyChecksum && task.checksum != null) {
-        debugPrint('Verifying checksum...');
         final isValid = await FileUtils.verifyChecksum(
           filePath,
           task.checksum!,
@@ -195,7 +190,6 @@ class DownloadService {
           await file.delete();
           throw Exception('Checksum verification failed');
         }
-        debugPrint('Checksum verified');
       }
 
       // Download completed
@@ -208,7 +202,6 @@ class DownloadService {
       );
 
       _cleanup(task.id);
-      debugPrint('Download completed successfully: ${task.fileName}');
       onComplete(completedTask);
     } on DioException catch (e) {
       if (raf != null) {
@@ -221,11 +214,10 @@ class DownloadService {
 
       if (e.type == DioExceptionType.cancel) {
         debugPrint('Download cancelled: ${task.fileName}');
-        return; // Cancelled by user, don't report as error
+        return;
       }
 
       String errorMessage = _getDioErrorMessage(e);
-      debugPrint('Download error: $errorMessage');
       onError(errorMessage);
     } catch (e, stackTrace) {
       if (raf != null) {
