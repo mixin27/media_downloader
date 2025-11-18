@@ -9,7 +9,7 @@ void main() async {
   // Initialize the downloader
   await MediaDownloader.instance.initialize(
     const DownloadConfig(
-      defaultStorageLocation: StorageLocation.downloads,
+      defaultStorageLocation: StorageLocation.externalStorage,
       showNotifications: true,
       maxRetries: 3,
       verifyChecksum: false,

@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:developer';
+
 import 'package:flutter/material.dart';
 import 'package:media_downloader/media_downloader.dart';
 
@@ -20,6 +23,8 @@ class _DownloadPageState extends State<DownloadPage> {
 
   List<MediaDownloadTask> _downloads = [];
   final Map<String, double> _progress = {};
+  final Map<String, StreamSubscription<DownloadProgress>>
+  _progressSubscriptions = {};
 
   @override
   void initState() {
@@ -32,6 +37,34 @@ class _DownloadPageState extends State<DownloadPage> {
     setState(() {
       _downloads = downloads;
     });
+
+    for (final download in downloads) {
+      if (_progressSubscriptions.containsKey(download.id)) continue;
+
+      final status = download.status;
+      if (status == DownloadStatus.downloading ||
+          status == DownloadStatus.paused ||
+          status == DownloadStatus.queued) {
+        final stream = _downloader.getProgressStream(download.id);
+        if (stream != null) {
+          _progressSubscriptions[download.id] = stream.listen(
+            (progress) {
+              if (!mounted) return;
+              setState(() {
+                _progress[download.id] = progress.progress;
+              });
+            },
+            onDone: () {
+              _progressSubscriptions.remove(download.id);
+            },
+            onError: (error) {
+              log('Progress stream error: $error');
+              _progressSubscriptions.remove(download.id);
+            },
+          );
+        }
+      }
+    }
   }
 
   Future<void> _startDownload() async {
@@ -42,20 +75,13 @@ class _DownloadPageState extends State<DownloadPage> {
     }
 
     try {
-      final downloadId = await _downloader.download(
+      await _downloader.download(
         url: url,
         requiresWifi: false,
         showNotification: true,
         openFileFromNotification: true,
         metadata: {'type': 'video', 'category': 'course_material'},
       );
-
-      // Listen to progress
-      _downloader.getProgressStream(downloadId)?.listen((progress) {
-        setState(() {
-          _progress[downloadId] = progress.progress;
-        });
-      });
 
       await _loadDownloads();
       _showMessage('Download started');
@@ -213,6 +239,9 @@ class _DownloadPageState extends State<DownloadPage> {
 
   @override
   void dispose() {
+    for (var sub in _progressSubscriptions.values) {
+      sub.cancel();
+    }
     _urlController.dispose();
     super.dispose();
   }

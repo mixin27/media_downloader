@@ -12,6 +12,7 @@ dependencies:
     sdk: flutter
 
   flutter_downloader: ^1.12.0
+  http: ^1.6.0
 
   # Storage
   path_provider: ^2.1.5

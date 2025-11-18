@@ -14,6 +14,15 @@ import 'utils/file_utils.dart';
 import 'utils/network_utils.dart';
 import 'services/permission_service.dart';
 
+// Top-level function for flutter_downloader callback
+@pragma('vm:entry-point')
+void downloadCallback(String id, int status, int progress) {
+  final SendPort? send = IsolateNameServer.lookupPortByName(
+    'downloader_send_port',
+  );
+  send?.send([id, status, progress]);
+}
+
 class MediaDownloader {
   static MediaDownloader? _instance;
   static MediaDownloader get instance {
@@ -58,6 +67,9 @@ class MediaDownloader {
       'downloader_send_port',
     );
 
+    // Load existing tasks to repopulate state after restart
+    await _loadExistingTasks();
+
     // Listen to download updates
     _port.listen(_handleDownloadUpdate);
 
@@ -75,15 +87,6 @@ class MediaDownloader {
     _initialized = true;
   }
 
-  /// Callback for flutter_downloader
-  @pragma('vm:entry-point')
-  static void downloadCallback(String id, int status, int progress) {
-    final SendPort? send = IsolateNameServer.lookupPortByName(
-      'downloader_send_port',
-    );
-    send?.send([id, status, progress]);
-  }
-
   void _handleDownloadUpdate(dynamic data) {
     final String id = data[0];
     final int status = data[1];
@@ -93,7 +96,7 @@ class MediaDownloader {
     if (task == null) return;
 
     // Convert flutter_downloader status to our status
-    final downloadStatus = _convertStatus(DownloadTaskStatus.values[status]);
+    final downloadStatus = _convertStatus(DownloadTaskStatus.fromInt(status));
 
     // Calculate progress
     final downloadedBytes = task.fileSize != null
@@ -204,6 +207,36 @@ class MediaDownloader {
     }
   }
 
+  Future<void> _loadExistingTasks() async {
+    final tasks = await FlutterDownloader.loadTasks();
+    if (tasks == null) return;
+
+    for (final task in tasks) {
+      final mediaTask = _convertToMediaTask(task);
+      _downloadTasks[task.taskId] = mediaTask;
+
+      if (mediaTask.fileSize == null) {
+        final fileSize = await _networkUtils.getFileSize(
+          mediaTask.url,
+          headers: mediaTask.headers,
+        );
+        if (fileSize != null) {
+          _downloadTasks[task.taskId] = mediaTask.copyWith(fileSize: fileSize);
+        }
+      }
+
+      final status = mediaTask.status;
+      if (status == DownloadStatus.downloading ||
+          status == DownloadStatus.paused ||
+          status == DownloadStatus.queued) {
+        if (!_progressControllers.containsKey(task.taskId)) {
+          _progressControllers[task.taskId] =
+              StreamController<DownloadProgress>.broadcast();
+        }
+      }
+    }
+  }
+
   /// Download a file
   /// Returns the download ID
   Future<String> download({
@@ -233,6 +266,8 @@ class MediaDownloader {
     if (!isConnected) {
       throw Exception('No internet connection');
     }
+
+    final fileSize = await _networkUtils.getFileSize(url, headers: headers);
 
     // Generate unique ID
     // final id = const Uuid().v4();
@@ -299,6 +334,7 @@ class MediaDownloader {
       priority: priority,
       requiresWifi: requiresWifi,
       checksum: checksum,
+      fileSize: fileSize,
     );
 
     _downloadTasks[taskId] = task;
@@ -511,7 +547,8 @@ class MediaDownloader {
 
   /// Get progress stream for a download
   Stream<DownloadProgress>? getProgressStream(String downloadId) {
-    return _progressControllers[downloadId]?.stream;
+    final progressStream = _progressControllers[downloadId]?.stream;
+    return progressStream;
   }
 
   /// Get the file path of a downloaded file
@@ -573,8 +610,8 @@ class MediaDownloader {
       filePath: task.filename != null
           ? FileUtils.joinPath(task.savedDir, task.filename!)
           : null,
-      fileSize: null,
-      downloadedBytes: task.progress,
+      fileSize: cachedTask?.fileSize,
+      downloadedBytes: 0,
       status: _convertStatus(task.status),
       mimeType: cachedTask?.mimeType,
       createdAt: cachedTask?.createdAt ?? DateTime.now(),

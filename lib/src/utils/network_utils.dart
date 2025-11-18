@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:http/http.dart' as http;
 
 class NetworkUtils {
   static final NetworkUtils instance = NetworkUtils._init();
@@ -46,6 +47,19 @@ class NetworkUtils {
   Future<ConnectivityResult> getConnectionType() async {
     final results = await _connectivity.checkConnectivity();
     return results.isNotEmpty ? results.first : ConnectivityResult.none;
+  }
+
+  Future<int?> getFileSize(String url, {Map<String, String>? headers}) async {
+    try {
+      final response = await http.head(Uri.parse(url), headers: headers);
+      if (response.statusCode == 200) {
+        final contentLength = response.headers['content-length'];
+        return contentLength != null ? int.parse(contentLength) : null;
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+    return null;
   }
 
   void dispose() {

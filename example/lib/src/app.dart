@@ -7,6 +7,8 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // final platform = Theme.of(context).platform;
+
     return MaterialApp(
       title: 'Media Downloader Demo',
       theme: ThemeData(
