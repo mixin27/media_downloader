@@ -33,11 +33,6 @@ class FileUtils {
               'Download',
               'MediaDownloader',
             );
-            // Ensure the directory exists
-            // final downloadDir = Directory(downloadPath);
-            // if (!await downloadDir.exists()) {
-            //   await downloadDir.create(recursive: true);
-            // }
             return downloadPath;
           }
         }
@@ -74,13 +69,11 @@ class FileUtils {
   }
 
   static String sanitizeFileName(String fileName) {
-    // Remove invalid characters
     String sanitized = fileName.replaceAll(
       RegExp(r'[<>:"/\\|?*\x00-\x1F]'),
       '_',
     );
 
-    // Limit length (keep extension)
     if (sanitized.length > 255) {
       final ext = path.extension(sanitized);
       final name = path.basenameWithoutExtension(sanitized);
@@ -95,6 +88,10 @@ class FileUtils {
     final ext = path.extension(originalName);
     final name = path.basenameWithoutExtension(originalName);
     return '${name}_$timestamp$ext';
+  }
+
+  static String joinPath(String dir, String fileName) {
+    return path.join(dir, fileName);
   }
 
   static Future<bool> fileExists(String filePath) async {
@@ -217,15 +214,6 @@ class FileUtils {
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
-  }
-
-  static Future<int> getAvailableSpace(String path) async {
-    if (Platform.isAndroid || Platform.isIOS) {
-      // Note: This is a simplified version. For production, consider using a plugin
-      // that provides accurate disk space information
-      return 1024 * 1024 * 1024 * 5; // Return 5GB as placeholder
-    }
-    return 1024 * 1024 * 1024 * 5;
   }
 }
 

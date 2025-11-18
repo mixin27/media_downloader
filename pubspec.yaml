@@ -11,23 +11,11 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # HTTP Client
-  dio: ^5.9.0
+  flutter_downloader: ^1.12.0
 
   # Storage
   path_provider: ^2.1.5
   path: ^1.9.1
-
-  # Database
-  sqflite: ^2.4.2
-
-  # Background tasks
-  workmanager: ^0.8.0
-  # Foreground tasks
-  flutter_foreground_task: ^9.1.0
-
-  # Notifications
-  flutter_local_notifications: ^19.5.0
 
   # Permissions
   permission_handler: ^12.0.1

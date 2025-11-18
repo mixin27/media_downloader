@@ -60,7 +60,7 @@ class PermissionService {
         final status = await Permission.notification.request();
         return status.isGranted;
       }
-      return true; // Not needed for Android < 13
+      return true;
     } else if (Platform.isIOS) {
       final status = await Permission.notification.request();
       return status.isGranted;
@@ -68,84 +68,27 @@ class PermissionService {
     return true;
   }
 
-  Future<bool> checkNotificationPermission() async {
-    if (Platform.isAndroid) {
-      final androidVersion = await _getAndroidVersion();
-      if (androidVersion >= 33) {
-        return await Permission.notification.isGranted;
-      }
-      return true;
-    } else if (Platform.isIOS) {
-      return await Permission.notification.isGranted;
-    }
-    return true;
-  }
-
   Future<Map<String, bool>> requestAllPermissions() async {
     final results = <String, bool>{};
-
     results['storage'] = await requestStoragePermission();
     results['notification'] = await requestNotificationPermission();
-
     return results;
   }
 
-  Future<bool> openAppSettings() async {
+  Future<bool> openSettings() async {
     return await openAppSettings();
-  }
-
-  Future<PermissionStatus> getPermissionStatus(Permission permission) async {
-    return await permission.status;
-  }
-
-  Future<bool> shouldShowRequestRationale(Permission permission) async {
-    if (Platform.isAndroid) {
-      return await permission.shouldShowRequestRationale;
-    }
-    return false;
   }
 
   Future<int> _getAndroidVersion() async {
     if (Platform.isAndroid) {
       try {
-        DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-        AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+        final deviceInfo = DeviceInfoPlugin();
+        final androidInfo = await deviceInfo.androidInfo;
         return androidInfo.version.sdkInt;
       } catch (e) {
         return 33;
       }
-      // This is a simplified version. In production, you might want to use
-      // platform channels or a plugin to get the exact Android version
-      // try {
-      //   // Assume modern Android by default
-      //   return 33;
-      // } catch (e) {
-      //   return 33;
-      // }
     }
     return 0;
-  }
-
-  String getPermissionMessage(Permission permission, PermissionStatus status) {
-    if (status.isDenied) {
-      return 'Permission denied. Please grant ${_getPermissionName(permission)} permission to continue.';
-    } else if (status.isPermanentlyDenied) {
-      return 'Permission permanently denied. Please enable ${_getPermissionName(permission)} permission in app settings.';
-    } else if (status.isRestricted) {
-      return '${_getPermissionName(permission)} permission is restricted on this device.';
-    }
-    return '';
-  }
-
-  String _getPermissionName(Permission permission) {
-    if (permission == Permission.storage ||
-        permission == Permission.manageExternalStorage) {
-      return 'storage';
-    } else if (permission == Permission.notification) {
-      return 'notification';
-    } else if (permission == Permission.photos) {
-      return 'photos';
-    }
-    return 'unknown';
   }
 }
